@@ -1,7 +1,12 @@
 const ytSearch = require('yt-search');
 const { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const {
-  joinVoiceChannel,
+ const connection = joinVoiceChannel({
+  channelId: voiceChannel.id,
+  guildId: interaction.guildId,
+  adapterCreator: interaction.guild.voiceAdapterCreator,
+  selfDeaf: false
+}); ,
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus
@@ -111,9 +116,16 @@ async function playMusic(interaction, voiceChannel) {
     adapterCreator: interaction.guild.voiceAdapterCreator
   });
 
-  const stream = await play.stream(url);
+  
+  const stream = await play.stream(url, {
+  discordPlayerCompatibility: true
+});
   const resource = createAudioResource(stream.stream, {
-    inputType: stream.type
+  inputType: stream.type
+});
+
+player.play(resource);
+connection.subscribe(player);
   });
 
   const player = createAudioPlayer();
