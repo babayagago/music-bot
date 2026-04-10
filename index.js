@@ -57,19 +57,34 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (!queues.has(guildId)) queues.set(guildId, []);
   const queue = queues.get(guildId);
+if (interaction.commandName === 'play') {
+  const query = interaction.options.getString('url');
+  const voiceChannel = interaction.member.voice.channel;
 
-  if (interaction.commandName === 'play') {
-    const url = interaction.options.getString('url');
-    const voiceChannel = interaction.member.voice.channel;
+  if (!voiceChannel) {
+    return interaction.reply({ content: "Rejoins un vocal", ephemeral: true });
+  }
 
-    if (!voiceChannel)
-      return interaction.reply({ content: "Rejoins un vocal", ephemeral: true });
+  let url = query;
 
-    queue.push(url);
-    await interaction.reply("Ajouté 🎵");
+  // Si ce n'est pas un lien YouTube → recherche
+  if (!query.includes("http")) {
+    const result = await ytSearch(query);
 
-    if (queue.length === 1)
-      playMusic(interaction, voiceChannel);
+    if (!result.videos.length) {
+      return interaction.reply("Aucune musique trouvée ❌");
+    }
+
+    url = result.videos[0].url;
+  }
+
+  queue.push(url);
+  await interaction.reply("Ajouté 🎵");
+
+  if (queue.length === 1) {
+    playMusic(interaction, voiceChannel);
+  }
+}
   }
 
   if (interaction.commandName === 'skip') {
