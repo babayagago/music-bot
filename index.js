@@ -1,3 +1,4 @@
+const ytSearch = require('yt-search');
 const { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const {
   joinVoiceChannel,
