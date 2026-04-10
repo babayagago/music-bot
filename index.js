@@ -1,96 +1,115 @@
-:::writing{variant=“standard” id=“fixrail1”}
-const { Client, GatewayIntentBits, Events } = require(‘discord.js’);
+const { Client, GatewayIntentBits, Events, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const {
-joinVoiceChannel,
-createAudioPlayer,
-createAudioResource,
-AudioPlayerStatus
-} = require(’@discordjs/voice’);
-const play = require(‘play-dl’);
-
-if (!process.env.TOKEN) {
-console.log(“TOKEN manquant !”);
-}
+  joinVoiceChannel,
+  createAudioPlayer,
+  createAudioResource,
+  AudioPlayerStatus
+} = require('@discordjs/voice');
+const play = require('play-dl');
 
 const client = new Client({
-intents: [
-GatewayIntentBits.Guilds,
-GatewayIntentBits.GuildVoiceStates
-]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates
+  ]
 });
 
 const queues = new Map();
 
-client.once(Events.ClientReady, () => {
-console.log(Connecté en tant que ${client.user.tag});
+// Slash commands
+const commands = [
+  new SlashCommandBuilder()
+    .setName('play')
+    .setDescription('Joue une musique YouTube')
+    .addStringOption(option =>
+      option.setName('url')
+        .setDescription('Lien YouTube')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder().setName('skip').setDescription('Skip musique'),
+  new SlashCommandBuilder().setName('stop').setDescription('Stop musique')
+];
+
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+async function deployCommands() {
+  try {
+    await rest.put(
+      Routes.applicationCommands(process.env.CLIENT_ID),
+      { body: commands }
+    );
+    console.log("Commandes installées !");
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+client.once(Events.ClientReady, async () => {
+  console.log(`Connecté en tant que ${client.user.tag}`);
+  await deployCommands();
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-const guildId = interaction.guildId;
+  const guildId = interaction.guildId;
 
-if (!queues.has(guildId)) queues.set(guildId, []);
-const queue = queues.get(guildId);
+  if (!queues.has(guildId)) queues.set(guildId, []);
+  const queue = queues.get(guildId);
 
-if (interaction.commandName === ‘play’) {
-const url = interaction.options.getString(‘url’);
-const voiceChannel = interaction.member.voice.channel;
-  if (!voiceChannel)
-  return interaction.reply({ content: "Rejoins un vocal", ephemeral: true });
+  if (interaction.commandName === 'play') {
+    const url = interaction.options.getString('url');
+    const voiceChannel = interaction.member.voice.channel;
 
-queue.push(url);
-await interaction.reply("Ajouté 🎵");
+    if (!voiceChannel)
+      return interaction.reply({ content: "Rejoins un vocal", ephemeral: true });
 
-if (queue.length === 1) playMusic(interaction, voiceChannel);
+    queue.push(url);
+    await interaction.reply("Ajouté 🎵");
+
+    if (queue.length === 1)
+      playMusic(interaction, voiceChannel);
   }
 
-if (interaction.commandName === ‘skip’) {
-queue.shift();
-playMusic(interaction, interaction.member.voice.channel);
-interaction.reply(“Skip”);
-}
+  if (interaction.commandName === 'skip') {
+    queue.shift();
+    playMusic(interaction, interaction.member.voice.channel);
+    interaction.reply("Skip");
+  }
 
-if (interaction.commandName === ‘stop’) {
-queues.set(guildId, []);
-interaction.reply(“Stop”);
-}
+  if (interaction.commandName === 'stop') {
+    queues.set(guildId, []);
+    interaction.reply("Stop");
+  }
 });
 
 async function playMusic(interaction, voiceChannel) {
-const queue = queues.get(interaction.guildId);
-if (!queue || queue.length === 0) return;
+  const queue = queues.get(interaction.guildId);
+  if (!queue || queue.length === 0) return;
 
-const url = queue[0];
+  const url = queue[0];
 
-const connection = joinVoiceChannel({
-channelId: voiceChannel.id,
-guildId: interaction.guildId,
-adapterCreator: interaction.guild.voiceAdapterCreator
-});
+  const connection = joinVoiceChannel({
+    channelId: voiceChannel.id,
+    guildId: interaction.guildId,
+    adapterCreator: interaction.guild.voiceAdapterCreator
+  });
 
-const stream = await play.stream(url).catch(err => {
-console.log(“Erreur stream:”, err);
-return null;
-});
+  const stream = await play.stream(url);
+  const resource = createAudioResource(stream.stream, {
+    inputType: stream.type
+  });
 
-if (!stream) return;
+  const player = createAudioPlayer();
+  player.play(resource);
+  connection.subscribe(player);
 
-const resource = createAudioResource(stream.stream, {
-inputType: stream.type
-});
+  interaction.channel.send(`▶️ Lecture: ${url}`);
 
-const player = createAudioPlayer();
-player.play(resource);
-connection.subscribe(player);
-
-interaction.channel.send(▶️ ${url});
-
-player.on(AudioPlayerStatus.Idle, () => {
-queue.shift();
-playMusic(interaction, voiceChannel);
-});
+  player.on(AudioPlayerStatus.Idle, () => {
+    queue.shift();
+    playMusic(interaction, voiceChannel);
+  });
 }
 
 client.login(process.env.TOKEN);
-:::
